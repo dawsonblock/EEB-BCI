@@ -13,25 +13,25 @@ PYTHON    = python3
 BUILD     = build
 
 # ── Source Files ─────────────────────────────────────────────
-SRCS = boreal_top.v \
-       boreal_apex_core.v \
-       boreal_spi_chain.v \
-       boreal_spi_fifo.v \
-       boreal_learning.v \
-       boreal_memory.v \
-       boreal_pwm_gen.v \
-       boreal_vns_control.v \
-       boreal_cordic_ik.v \
-       boreal_ad_guard.v \
-       boreal_watchdog.v \
-       boreal_status_regs.v
+SRCS = src/boreal_top.v \
+       src/boreal_apex_core.v \
+       src/boreal_spi_chain.v \
+       src/boreal_spi_fifo.v \
+       src/boreal_learning.v \
+       src/boreal_memory.v \
+       src/boreal_pwm_gen.v \
+       src/boreal_vns_control.v \
+       src/boreal_cordic_ik.v \
+       src/boreal_ad_guard.v \
+       src/boreal_watchdog.v \
+       src/boreal_status_regs.v
 
 # ── Testbenches ──────────────────────────────────────────────
-TB_CORE_SRC = tb_boreal_apex_core.v
-TB_VNS_SRC  = tb_boreal_vns.v
+TB_CORE_SRC = tb/tb_boreal_apex_core.v
+TB_VNS_SRC  = tb/tb_boreal_vns.v
 
 # ── LUT Generation ───────────────────────────────────────────
-LUT_SCRIPT  = lut_gen.py
+LUT_SCRIPT  = scripts/lut_gen.py
 LUT_FILE    = sigmoid_lut.mem
 
 # ── Build Outputs ────────────────────────────────────────────
