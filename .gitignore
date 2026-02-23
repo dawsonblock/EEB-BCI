@@ -1,9 +1,19 @@
-# Build outputs
+# Boreal Neuro-Core — .gitignore
+
+# Build artifacts
 build/
 *.vcd
 *.log
 *.vvp
+
+# Generated LUT files (regenerated via `make lut`)
 *.mem
 
-# OS Files
+# OS files
 .DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
