@@ -24,11 +24,15 @@ module boreal_eeg_fusion (
     // Filter coefficient (Same as single-channel Apex core α)
     localparam signed [15:0] ALPHA = 16'd102; // Roughly ~0.99 in Q15
 
+    (* ram_style = "logic" *)
     reg signed [23:0] ch_raw      [0:7];
+    (* ram_style = "logic" *)
     reg signed [31:0] ch_filtered [0:7];
     
     // DSP Sum Pipeline Registers
+    (* ram_style = "logic" *)
     reg signed [31:0] sum_stage_0 [0:3];
+    (* ram_style = "logic" *)
     reg signed [31:0] sum_stage_1 [0:1];
     reg signed [31:0] final_sum;
     

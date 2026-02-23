@@ -28,6 +28,7 @@ module boreal_spi_fifo #(
 );
 
     // Memory array
+    (* ram_style = "logic" *)
     reg [DATA_WIDTH-1:0] mem [0:(2**ADDR_WIDTH)-1];
     
     // Pointers (Binary for memory addressing, Gray for cross-domain)
