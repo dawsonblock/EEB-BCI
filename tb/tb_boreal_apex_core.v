@@ -36,8 +36,6 @@ module tb_boreal_apex_core;
         .w_matrix(w_matrix),
         .w_addr(w_addr),
         .mu_out(mu_out),
-        .theta_1(theta_1),
-        .theta_2(theta_2),
         .current_epsilon(current_epsilon),
         .current_mu(current_mu),
         .trigger_reward(trigger_reward),

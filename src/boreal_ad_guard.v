@@ -4,10 +4,11 @@
  * Boreal Neuro-Core v3.0
  * Module: boreal_ad_guard
  * Description: Mathematical detection of Autonomic Dysreflexia.
- * Calculates real-time Pearson Correlation Coefficient (R) between 
- * Heart Rate Variability (HRV) and Inference Error (epsilon).
+ * Calculates real-time covariance-like accumulation between
+ * Heart Rate Variability (HRV) and Inference Error (epsilon)
+ * using Exponential Moving Average (EMA) means.
  * 
- * Asserts ad_guard_active when strong positive correlation points to systemic stress.
+ * Asserts ad_guard_active when strong positive covariance points to systemic stress.
  */
 
 module boreal_ad_guard (

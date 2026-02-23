@@ -36,8 +36,10 @@ TB_CORE_SRC = tb/tb_boreal_apex_core.v
 TB_VNS_SRC  = tb/tb_boreal_vns.v
 
 # ── LUT Generation ───────────────────────────────────────────
-LUT_SCRIPT  = scripts/lut_gen.py
-LUT_FILE    = sigmoid_lut.mem
+LUT_SCRIPT      = scripts/lut_gen.py
+LUT_FILE        = sigmoid_lut.mem
+ACOS_LUT_SCRIPT = scripts/acos_lut_gen.py
+ACOS_LUT_FILE   = acos_lut.mem
 
 # ── Build Outputs ────────────────────────────────────────────
 LINT_OUT    = $(BUILD)/boreal_lint.vvp
@@ -75,18 +77,20 @@ $(BUILD):
 	@mkdir -p $(BUILD)
 
 # ── LUT Generation (incremental) ────────────────────────────
-lut: $(LUT_FILE)
+lut: $(LUT_FILE) $(ACOS_LUT_FILE)
 
 $(LUT_FILE): $(LUT_SCRIPT)
-	@echo "[LUT] Generating sigmoid and acos look-up tables..."
+	@echo "[LUT] Generating sigmoid look-up table..."
 	@$(PYTHON) $(LUT_SCRIPT)
-	@$(PYTHON) scripts/acos_lut_gen.py
-	@echo "[LUT] Done."
+
+$(ACOS_LUT_FILE): $(ACOS_LUT_SCRIPT)
+	@echo "[LUT] Generating acos look-up table..."
+	@$(PYTHON) $(ACOS_LUT_SCRIPT)
 
 # ── Lint ─────────────────────────────────────────────────────
 lint: $(LINT_OUT)
 
-$(LINT_OUT): $(SRCS) $(LUT_FILE) | $(BUILD)
+$(LINT_OUT): $(SRCS) $(LUT_FILE) $(ACOS_LUT_FILE) | $(BUILD)
 	@echo "[LINT] Checking Verilog sources..."
 	@$(IVERILOG) -Wall -o $(LINT_OUT) $(SRCS)
 	@echo "[LINT] Passed. No errors."
@@ -99,7 +103,7 @@ sim: sim_core sim_vns
 sim_core: $(TB_CORE_OUT)
 	@$(VVP) $(TB_CORE_OUT)
 
-$(TB_CORE_OUT): $(SRCS) $(TB_CORE_SRC) $(LUT_FILE) | $(BUILD)
+$(TB_CORE_OUT): $(SRCS) $(TB_CORE_SRC) $(LUT_FILE) $(ACOS_LUT_FILE) | $(BUILD)
 	@echo "[SIM] Compiling Apex Core testbench..."
 	@cp sigmoid_lut.mem $(BUILD)/
 	@cp acos_lut.mem $(BUILD)/
@@ -108,14 +112,14 @@ $(TB_CORE_OUT): $(SRCS) $(TB_CORE_SRC) $(LUT_FILE) | $(BUILD)
 sim_vns: $(TB_VNS_OUT)
 	@$(VVP) $(TB_VNS_OUT)
 
-$(TB_VNS_OUT): $(SRCS) $(TB_VNS_SRC) $(LUT_FILE) | $(BUILD)
+$(TB_VNS_OUT): $(SRCS) $(TB_VNS_SRC) $(LUT_FILE) $(ACOS_LUT_FILE) | $(BUILD)
 	@echo "[SIM] Compiling VNS Control testbench..."
 	@$(IVERILOG) -o $(TB_VNS_OUT) $(SRCS) $(TB_VNS_SRC)
 
 # ── Synthesis ────────────────────────────────────────────────
 synth: $(SYNTH_OUT)
 
-$(SYNTH_OUT): $(SRCS) $(LUT_FILE) | $(BUILD)
+$(SYNTH_OUT): $(SRCS) $(LUT_FILE) $(ACOS_LUT_FILE) | $(BUILD)
 	@echo "[SYNTH] Running Yosys → Xilinx Artix-7..."
 	@$(YOSYS) -p "\
 		read_verilog $(SRCS); \
