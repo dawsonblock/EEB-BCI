@@ -73,9 +73,10 @@ $(BUILD):
 lut: $(LUT_FILE)
 
 $(LUT_FILE): $(LUT_SCRIPT)
-	@echo "[LUT] Generating sigmoid look-up table..."
+	@echo "[LUT] Generating sigmoid and acos look-up tables..."
 	@$(PYTHON) $(LUT_SCRIPT)
-	@echo "[LUT] Done → $(LUT_FILE)"
+	@$(PYTHON) scripts/acos_lut_gen.py
+	@echo "[LUT] Done."
 
 # ── Lint ─────────────────────────────────────────────────────
 lint: $(LINT_OUT)
@@ -95,6 +96,8 @@ sim_core: $(TB_CORE_OUT)
 
 $(TB_CORE_OUT): $(SRCS) $(TB_CORE_SRC) $(LUT_FILE) | $(BUILD)
 	@echo "[SIM] Compiling Apex Core testbench..."
+	@cp sigmoid_lut.mem $(BUILD)/
+	@cp acos_lut.mem $(BUILD)/
 	@$(IVERILOG) -o $(TB_CORE_OUT) $(SRCS) $(TB_CORE_SRC)
 
 sim_vns: $(TB_VNS_OUT)

@@ -14,7 +14,7 @@ module boreal_vns_control (
     input  wire [7:0] intensity,       // Pulse width scaler 0-255 (microseconds)
     
     // Safety & Physiological Overlays
-    input  wire       ad_guard_active, // Ext AD-Guard flag for therapeutic mode
+    input  wire       ad_guard_active, // v5.0: Distress interlock signal
     input  wire       t_wave_inhibit,  // Cardiac guardrail block flag
     
     // Outputs
@@ -68,7 +68,8 @@ module boreal_vns_control (
             pulse_count  <= 8'd0;
         end else begin
             // Reward match logic
-            if (trigger_in && !safety_active && !burst_active) begin
+            // v5.0: Safety Interlock injected: Prevent burst if AD-Guard detected distress
+            if (trigger_in && !safety_active && !burst_active && !ad_guard_active) begin
                 burst_active <= 1'b1;
                 pulse_count  <= 8'd0;
                 pulse_timer  <= 32'd0;

@@ -20,13 +20,7 @@ module boreal_ad_guard (
     output reg                  ad_guard_active // Interlock flag sent to VNS controller
 );
 
-    // Hardcoded Baseline/Means for the accumulators
-    // In a dynamic system, these would be rolling averages over a 5000 cycle window.
-    localparam signed [15:0] MEAN_EPS = 16'd50;
-    localparam signed [15:0] MEAN_HRV = 16'd120;
-    
-    // Threshold indicating a sympathetic surge requiring intervention
-    // Scaled for fixed point math.
+    // Configurable thresholds
     localparam signed [31:0] R_THRESHOLD = 32'h00A0_0000; 
 
     // Covariance / Variance accumulators
@@ -38,11 +32,19 @@ module boreal_ad_guard (
     reg [9:0] samples_collected;
     
     reg signed [31:0] prod_covar;
+    reg               enable_guard;
+
+    // v5.0: Online Exponential Mean Estimators
+    reg signed [15:0] mean_eps;
+    reg signed [15:0] mean_hrv;
+
+    // Registers for deltas (calculated from dynamic means)
+    reg signed [15:0] delta_eps;
+    reg signed [15:0] delta_hrv;
     
-    // Calculate deltas combinationally
-    wire signed [15:0] delta_eps = epsilon - MEAN_EPS;
-    wire signed [15:0] delta_hrv = hrv_metric - MEAN_HRV;
-    
+    // ============================================================
+    // State machine and Accumulators
+    // ============================================================
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             covar_sum         <= 32'd0;
@@ -51,12 +53,31 @@ module boreal_ad_guard (
             samples_collected <= 10'd0;
             ad_guard_active   <= 1'b0;
             prod_covar        <= 32'd0;
+            enable_guard      <= 1'b0; // Initialize enable_guard
+            mean_eps          <= 16'd0; // Initialize mean_eps
+            mean_hrv          <= 16'd0; // Initialize mean_hrv
+            delta_eps         <= 16'd0;
+            delta_hrv         <= 16'd0;
         end else if (data_valid) begin
+            // 1) Update Dynamic Means (EMA: ~1/256 smoothing factor)
+            if (samples_collected == 10'd0 && !enable_guard) begin
+                // Fast-track initialization during startup for the first sample
+                mean_eps <= epsilon;
+                mean_hrv <= hrv_metric;
+                enable_guard <= 1'b1; // Enable EMA after first sample
+            end else if (enable_guard) begin
+                mean_eps <= mean_eps + ((epsilon - mean_eps) >>> 8);
+                mean_hrv <= mean_hrv + ((hrv_metric - mean_hrv) >>> 8);
+            end
             
-            // 1. Pipeline Stage: Register the massive multiplier
+            // 2) Compute deltas vs dynamic means
+            delta_eps <= epsilon - mean_eps;
+            delta_hrv <= hrv_metric - mean_hrv;
+            
+            // 3. Pipeline Stage: Register the massive multiplier
             prod_covar <= delta_eps * delta_hrv;
             
-            // 2. Accumulate Stage: Uses the registered multiplier from the *previous* data_valid cycle
+            // 4. Accumulate Stage: Uses the registered multiplier from the *previous* data_valid cycle
             // This 1-sample lag is mathematically irrelevant over a 1024 sample window, 
             // but saves significant DSP routing delay.
             covar_sum   <= covar_sum + prod_covar;

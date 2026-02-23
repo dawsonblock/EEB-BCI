@@ -29,6 +29,7 @@ module boreal_status_regs (
     input  wire signed [15:0] epsilon,
     input  wire signed [15:0] theta_1,
     input  wire signed [15:0] theta_2,
+    input  wire        system_safe,     // v5.0: Global safety interlock
     input  wire               ad_guard_active,
     input  wire               safety_active,
     input  wire               wdt_fault,
@@ -43,7 +44,7 @@ module boreal_status_regs (
             case (addr)
                 3'd0: rd_data <= mu_out;
                 3'd1: rd_data <= epsilon;
-                3'd2: rd_data <= {12'd0, ~bite_switch_n, wdt_fault, safety_active, ad_guard_active};
+                3'd2: rd_data <= {12'd0, ~bite_switch_n, wdt_fault, safety_active, ad_guard_active, system_safe};
                 3'd3: rd_data <= spi_txn_count;
                 3'd4: rd_data <= theta_1;
                 3'd5: rd_data <= theta_2;

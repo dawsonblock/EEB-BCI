@@ -29,7 +29,13 @@ module boreal_cordic_ik (
     localparam signed [15:0] L2 = 16'd100;
     localparam signed [31:0] L1_SQ = L1 * L1;
     localparam signed [31:0] L2_SQ = L2 * L2;
-    localparam signed [31:0] TWO_L1_L2 = 2 * L1 * L2;
+    localparam signed [31:0] TWO_L1_L2 = 32'd20000; // 2 * L1 * L2 (2 * 100 * 100)
+
+    // Acos Lookup Table (v5.0: Maps [-1, 1] to [0, 255] index -> Q13 radians)
+    reg [15:0] acos_lut [0:255];
+    initial begin
+        $readmemh("acos_lut.mem", acos_lut);
+    end
 
     // Pre-computed arctangent table (Q2.13 radians, scaled by 8192)
     // atan(2^-i) for i = 0..15
@@ -66,6 +72,9 @@ module boreal_cordic_ik (
     
     // Law of Cosines intermediates
     reg signed [31:0] r_squared;
+    reg signed [31:0] cos_theta2;
+    reg signed [31:0] clamped_cos;
+    reg [7:0]         lut_index;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -76,8 +85,9 @@ module boreal_cordic_ik (
             x_reg     <= 24'd0;
             y_reg     <= 24'd0;
             z_reg     <= 16'd0;
-            iter      <= 4'd0;
-            r_squared <= 32'd0;
+            iter       <= 4'd0;
+            r_squared  <= 32'd0;
+            cos_theta2 <= 32'd0;
         end else begin
             case (state)
                 IDLE: begin
@@ -95,6 +105,10 @@ module boreal_cordic_ik (
                             z_reg <= 16'd0;
                         end
                         iter  <= 4'd0;
+                        
+                        // v5.0: Calculate r_squared in IDLE to save cycle time later
+                        r_squared <= (mu_x * mu_x) + (mu_y * mu_y);
+
                         state <= ITERATE;
                     end
                 end
@@ -125,19 +139,26 @@ module boreal_cordic_ik (
                     theta_1 <= z_reg;
                     
                     // Law of Cosines for elbow angle:
-                    // cos(theta_2) = (x^2 + y^2 - L1^2 - L2^2) / (2*L1*L2)
-                    // Use the CORDIC magnitude (x_reg ≈ sqrt(x^2+y^2) * K)
-                    // Approximate r^2 from original inputs
-                    r_squared <= ({{16{mu_x[15]}}, mu_x} * {{16{mu_x[15]}}, mu_x}) + 
-                                 ({{16{mu_y[15]}}, mu_y} * {{16{mu_y[15]}}, mu_y});
+                    // cos(theta_2) = (r^2 - L1^2 - L2^2) / (2*L1*L2)
                     
-                    // Simplified elbow: map (r^2 - L1^2 - L2^2) / (2*L1*L2) to angle
-                    theta_2 <= (r_squared[25:10]) - ((L1_SQ + L2_SQ) >> 10);
+                    // Fixed-point calculation
+                    // cos_theta2 maps the -1.0 to 1.0 range into an 8-bit index (0 to 255)
+                    // We multiply by 127.5 internally.
+                    cos_theta2 <= ((r_squared - L1_SQ - L2_SQ) * 32'sd127) / TWO_L1_L2;
                     
                     state <= DONE;
                 end
                 
                 DONE: begin
+                    // Shift the signed [-128, 127] result into the unsigned [0, 255] LUT address space
+                    clamped_cos = 
+                        (cos_theta2 > 32'sd127)  ? 32'sd127 :
+                        (cos_theta2 < -32'sd128) ? -32'sd128 :
+                        cos_theta2;
+                        
+                    lut_index = clamped_cos[7:0] + 8'd128;
+                    
+                    theta_2   <= acos_lut[lut_index];
                     valid_out <= 1'b1;
                     state     <= IDLE;
                 end

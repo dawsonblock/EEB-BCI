@@ -70,11 +70,23 @@ module boreal_top (
     wire               wdt_reset;
 
     // ============================================================
-    // 1) SPI Data Ingestion (v4.0: edge-detected DRDY)
+    // 2.5) System Safety Backbone (v5.0)
     // ============================================================
-    boreal_spi_chain spi_inst (
+    wire system_safe;
+    wire local_rst_n;
+
+    assign system_safe = !ad_guard_active && !safety_active && !wdt_fault && bite_switch_n;
+    
+    // Watchdog fault triggers a full downstream initialization reset
+    assign local_rst_n = rst_n & ~wdt_reset;
+
+
+    // ============================================================
+    // 3) Biopotential Ingestion (SPI Chain + FIFO, edge-detected DRDY)
+    // ============================================================
+    boreal_spi_chain spi_chain_inst (
         .clk(clk),
-        .rst_n(rst_n),
+        .rst_n(local_rst_n),
         .sclk(sclk),
         .cs_n(cs_n),
         .mosi(mosi),
@@ -88,9 +100,9 @@ module boreal_top (
     // ============================================================
     // 2) Active Inference Core
     // ============================================================
-    boreal_apex_core apex_inst (
+    boreal_apex_core apex_core_inst (
         .clk(clk),
-        .rst_n(rst_n),
+        .rst_n(local_rst_n),
         .bite_switch_n(bite_switch_n),
         .data_valid(spi_data_valid),
         .raw_eeg_in(spi_data_payload[23:0]),
@@ -137,9 +149,9 @@ module boreal_top (
     // ============================================================
     // 5) VNS Reward Controller (v4.0: configurable intensity)
     // ============================================================
-    boreal_vns_control vns_inst (
+    boreal_vns_control vns_control_inst (
         .clk(clk),
-        .rst_n(rst_n),
+        .rst_n(local_rst_n),
         .trigger_in(trigger_reward),
         .intensity(vns_intensity),
         .ad_guard_active(ad_guard_active),
@@ -151,17 +163,21 @@ module boreal_top (
     // ============================================================
     // 6) PWM Generators
     // ============================================================
-    boreal_pwm_gen pwm_shoulder (
+    // Mux PWM output based on global safety interlock
+    wire [15:0] pwm_safe_in_1 = system_safe ? theta_1 : 16'd0;
+    wire [15:0] pwm_safe_in_2 = system_safe ? theta_2 : 16'd0;
+
+    boreal_pwm_gen pwm_gen_inst_1 (
         .clk(clk),
-        .rst_n(rst_n),
-        .duty_cycle(theta_1[15:4]),
+        .rst_n(local_rst_n),
+        .duty_cycle(pwm_safe_in_1[11:0]), // Downcast base 16-bit to 12-bit PWM
         .pwm_out(pwm_out_1)
     );
 
-    boreal_pwm_gen pwm_elbow (
+    boreal_pwm_gen pwm_gen_inst_2 (
         .clk(clk),
-        .rst_n(rst_n),
-        .duty_cycle(theta_2[15:4]),
+        .rst_n(local_rst_n),
+        .duty_cycle(pwm_safe_in_2[11:0]),
         .pwm_out(pwm_out_2)
     );
 
@@ -172,7 +188,7 @@ module boreal_top (
         .TIMEOUT_CYCLES(23'd5_000_000) // 50ms at 100MHz
     ) wdt_inst (
         .clk(clk),
-        .rst_n(rst_n),
+        .rst_n(local_rst_n),
         .data_valid(spi_data_valid),
         .wdt_fault(wdt_fault),
         .wdt_reset(wdt_reset)
@@ -181,9 +197,10 @@ module boreal_top (
     // ============================================================
     // 8) Debug Status Registers (v4.0)
     // ============================================================
-    boreal_status_regs status_inst (
+    boreal_status_regs status_regs_inst (
         .clk(clk),
-        .rst_n(rst_n),
+        .rst_n(local_rst_n),
+        .system_safe(system_safe),
         .addr(dbg_addr),
         .rd_en(dbg_rd_en),
         .rd_data(dbg_rd_data),
