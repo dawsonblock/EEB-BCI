@@ -1,0 +1,9 @@
+# Build outputs
+build/
+*.vcd
+*.log
+*.vvp
+*.mem
+
+# OS Files
+.DS_Store
