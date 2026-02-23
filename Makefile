@@ -13,18 +13,23 @@ PYTHON    = python3
 BUILD     = build
 
 # ── Source Files ─────────────────────────────────────────────
-SRCS = src/boreal_top.v \
-       src/boreal_apex_core.v \
-       src/boreal_spi_chain.v \
-       src/boreal_spi_fifo.v \
-       src/boreal_learning.v \
-       src/boreal_memory.v \
-       src/boreal_pwm_gen.v \
-       src/boreal_vns_control.v \
-       src/boreal_cordic_ik.v \
-       src/boreal_ad_guard.v \
-       src/boreal_watchdog.v \
-       src/boreal_status_regs.v
+SRCS = \
+	src/boreal_spi_chain.v \
+	src/boreal_spi_fifo.v \
+	src/boreal_ad_guard.v \
+	src/boreal_apex_core.v \
+	src/boreal_learning.v \
+	src/boreal_memory.v \
+	src/boreal_pwm_gen.v \
+	src/boreal_vns_control.v \
+	src/boreal_cordic_ik.v \
+	src/boreal_watchdog.v \
+	src/boreal_status_regs.v \
+	src/boreal_safety_escalation.v \
+	src/boreal_eeg_fusion.v \
+	src/boreal_replay_buffer.v \
+	src/boreal_decision_vm.v \
+	src/boreal_top.v
 
 # ── Testbenches ──────────────────────────────────────────────
 TB_CORE_SRC = tb/tb_boreal_apex_core.v

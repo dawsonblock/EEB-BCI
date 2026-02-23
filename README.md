@@ -1,16 +1,18 @@
 # Boreal Neuro-Core
 
-> **Version 4.1** — Advanced FPGA-based closed-loop neural interface architecture.
+> **Version 6.0** — Advanced FPGA-based closed-loop neural interface architecture (Layer 3 Expansion).
 
 The **Boreal Neuro-Core** is a low-latency, highly optimized hardware engine designed for real-time bidirectional Brain-Computer Interfaces (BCI). Built natively in Verilog and targeted for Xilinx Artix-7 FPGAs, it integrates motor intent decoding, robotic inverse kinematics, and therapeutic Vagus Nerve Stimulation (VNS) into a unified, sub-millisecond pipeline.
 
 ## 🚀 Key Features
 
-- **Active Inference Engine:** Uses stochastic gradient descent and Hebbian learning rules to dynamically map raw EEG signals to physical robotic states (`μ`). Features multi-stage DSP pipelining, temporal predictive coding (lag compensation), and mathematically saturated boundaries.
-- **CORDIC Inverse Kinematics:** A fully unrolled, 16-iteration pipelined `atan2` engine using shift-and-add logic and pre-computed ROM. Calculates required joint angles (`θ1`, `θ2`) continuously without stalling the main pipeline.
-- **Therapeutic VNS Bursting:** "Leaky Bucket" duty-cycle timing mechanism for targeted nerve stimulation, locked behind a strict **T-Wave cardiac guardrail** to theoretically eliminate physical risks during vulnerable heartbeat phases.
-- **Robust SPI Interfacing:** Glitch-free, edge-detected SPI chain with internal 16-word FIFO buffering to decouple asynchronous biopotential front-ends (like the ADS1299) from the raw processing core.
-- **Physical Hardening:** Features structural PWM glitch prevention, a 50ms hardware watchdog timer to recover from sensory disconnects, and a queryable status register file for live debug monitoring.
+- **Advanced Active Inference Engine:** Uses stochastic gradient descent and Hebbian learning rules to dynamically map raw EEG signals to physical robotic states (`μ`). Features multi-stage DSP pipelining, temporal predictive coding (lag compensation), and absolute arithmetic saturation.
+- **Deterministic Decision VM:** A 32-bit Micro-Instruction Set ROM providing programmable routing. It intercepts continuous inference signals and enforces safe fixed-coordinate outputs to the kinematics solvers.
+- **Structured Safety Escalation:** A hardware-level 4-Tier safety state machine evaluating continuous biological signals (like AD distress) alongside watchdog timers to dynamically restrict motor geometry and force therapeutic timeouts.
+- **Hardware Replay Buffer:** A 1024-deep x 48-bit wide telemetry ledger natively mapped to Artix-7 Block RAM to log continuous inference predictions and errors for non-blocking host-side diagnostics.
+- **Multi-Channel EEG Fusion:** Parallel 8-channel array of IIR DC-blockers mapped to a spatial filter, enabling spatial signal diversity.
+- **CORDIC Inverse Kinematics:** A 16-iteration unrolled pipeline resolving physical joint angles using a natively instantiated cosine lookup RAM to ensure mathematical determinism.
+- **Robust SPI Interfacing:** Edge-detected asynchronous dual-clock FIFO buffering bridging continuous high-speed digital ingestion flawlessly with the computational clock domains.
 
 ## 📂 Project Structure
 

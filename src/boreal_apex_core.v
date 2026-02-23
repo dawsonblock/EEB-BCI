@@ -27,8 +27,6 @@ module boreal_apex_core (
     
     // Decoded Outputs
     output wire signed [15:0]   mu_out,       // The "Time Machine" predicted manifold state
-    output wire signed [15:0]   theta_1,      // Robotic Shoulder joint mapping
-    output wire signed [15:0]   theta_2,      // Robotic Elbow joint mapping
     
     // Peripheral routing for Hebbian plasticity and tVNS reward
     output wire signed [15:0]   current_epsilon,
@@ -176,22 +174,6 @@ module boreal_apex_core (
         .epsilon(epsilon),
         .hrv_metric(hrv_metric),
         .ad_guard_active(ad_guard_active)
-    );
-
-    // ----------------------------------------------------
-    // 5) INTEGRATION: CORDIC Inverse Kinematics
-    // ----------------------------------------------------
-    // Trigger IK computation when we have new inferred data
-    boreal_cordic_ik ik_inst (
-        .clk(clk),
-        .rst_n(rst_n),
-        .enable(data_valid),
-        .mu_x(mu_predicted), // Drive IK with the lag-compensated lead vector
-        .mu_y(mu_t),         // Example proxy assignment for multi-axis
-        .mu_z(16'd0),        // Reserved
-        .valid_out(),
-        .theta_1(theta_1),
-        .theta_2(theta_2)
     );
 
     // Signal Routing

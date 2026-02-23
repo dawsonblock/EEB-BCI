@@ -70,20 +70,47 @@ module boreal_top (
     wire               wdt_reset;
 
     // ============================================================
-    // 2.5) System Safety Backbone (v5.0)
+    // 2.5) Structured Safety Escalation (Layer 3)
     // ============================================================
-    wire system_safe;
-    wire local_rst_n;
+    wire [1:0] safety_tier;
+    wire       pwm_inhibit_motion;
+    wire       pwm_half_speed;
+    wire       vns_inhibit_therapy;
+    wire       freeze_learning;
+    wire       local_rst_n;
 
-    assign system_safe = !ad_guard_active && !safety_active && !wdt_fault && bite_switch_n;
+    // High error without distress triggers Tier 1 escalation
+    wire high_error_flag = (current_epsilon > 16'sd200_00) ? 1'b1 : 1'b0;
+
+    boreal_safety_escalation safety_mgr (
+        .clk(clk),
+        .rst_n(rst_n),
+        .ad_guard_active(ad_guard_active),
+        .safety_active(safety_active),
+        .wdt_fault(wdt_fault),
+        .bite_switch_n(bite_switch_n),
+        .high_error_flag(high_error_flag),
+        .safety_tier(safety_tier),
+        .pwm_inhibit_motion(pwm_inhibit_motion),
+        .pwm_half_speed(pwm_half_speed),
+        .vns_inhibit_therapy(vns_inhibit_therapy),
+        .freeze_learning(freeze_learning)
+    );
     
     // Watchdog fault triggers a full downstream initialization reset
     assign local_rst_n = rst_n & ~wdt_reset;
 
 
     // ============================================================
-    // 3) Biopotential Ingestion (SPI Chain + FIFO, edge-detected DRDY)
+    // 3) Biopotential Ingestion (SPI Chain + FIFO)
     // ============================================================
+    
+    // Mock expansion for the 8-channel fusion block.
+    // In hardware, this SPI payload would be 8x wider (192 bits).
+    // For V6.0 MVP, we duplicate the single channel 8 times to satisfy the fusion bus.
+    wire [191:0] raw_eeg_array = {8{spi_data_payload[23:0]}};
+    wire [23:0]  fused_eeg;
+    wire         fused_valid;
     boreal_spi_chain spi_chain_inst (
         .clk(clk),
         .rst_n(local_rst_n),
@@ -96,26 +123,96 @@ module boreal_top (
         .data_valid(spi_data_valid),
         .txn_count(spi_txn_count)
     );
+    boreal_spi_fifo spi_fifo_inst (
+        .wr_clk(clk),
+        .wr_rst_n(local_rst_n),
+        .wr_en(spi_data_valid),
+        .din(spi_data_payload), // Will hold full array in future expansion
+        .rd_clk(clk),
+        .rd_rst_n(local_rst_n),
+        .rd_en(1'b0),  // Unused in current continuous stream geometry
+        .dout(),       // Unused
+        .empty(),
+        .full()
+    );
+
+    // ============================================================
+    // 3.5) EEG Spatial Fusion Block (Layer 3)
+    // ============================================================
+    boreal_eeg_fusion fusion_inst (
+        .clk(clk),
+        .rst_n(local_rst_n),
+        .data_valid(spi_data_valid),
+        .raw_eeg_array(raw_eeg_array),
+        .eeg_filtered_out(fused_eeg),
+        .fusion_valid(fused_valid)
+    );
 
     // ============================================================
     // 2) Active Inference Core
     // ============================================================
+    
+    wire signed [15:0] target_x;
+    wire signed [15:0] target_y;
+    wire               vm_ik_enable;
+    wire               vm_vns_override;
+    
     boreal_apex_core apex_core_inst (
         .clk(clk),
         .rst_n(local_rst_n),
         .bite_switch_n(bite_switch_n),
-        .data_valid(spi_data_valid),
-        .raw_eeg_in(spi_data_payload[23:0]),
+        .data_valid(fused_valid),
+        .raw_eeg_in(fused_eeg), // Fed from Fusion block, not raw SPI
         .hrv_metric(hrv_metric),
         .w_matrix(w_dout),
         .w_addr(w_addr),
         .mu_out(mu_out),
-        .theta_1(theta_1),
-        .theta_2(theta_2),
         .current_epsilon(current_epsilon),
         .current_mu(current_mu),
         .trigger_reward(trigger_reward),
         .ad_guard_active(ad_guard_active)
+    );
+
+    // Layer 3: Wire CORDIC IK manually since Apex core integration was decoupled for VM
+    boreal_cordic_ik cordic_solver (
+        .clk(clk),
+        .rst_n(local_rst_n),
+        .enable(vm_ik_enable),
+        .mu_x(target_x),
+        .mu_y(target_y),
+        .mu_z(16'd0),
+        .valid_out(),
+        .theta_1(theta_1),
+        .theta_2(theta_2)
+    );
+
+    // ============================================================
+    // 3.8) Hardware Replay Buffer (Layer 3)
+    // ============================================================
+    boreal_replay_buffer ledger_bram (
+        .clk(clk),
+        .rst_n(local_rst_n),
+        .data_valid(fused_valid),
+        .mu_t(current_mu),
+        .epsilon(current_epsilon),
+        .hrv_metric(hrv_metric),
+        .read_addr(10'd0), // To be attached to SPI host in Layer 4
+        .read_data()
+    );
+
+    // ============================================================
+    // 3.9) Deterministic Decision VM (Layer 3)
+    // ============================================================
+    boreal_decision_vm policy_vm (
+        .clk(clk),
+        .rst_n(local_rst_n),
+        .safety_tier(safety_tier),
+        .data_valid(fused_valid), // Executed after inference provides a new state
+        .mu_out(mu_out),
+        .target_x(target_x),
+        .target_y(target_y),
+        .vm_ik_enable(vm_ik_enable),
+        .vm_vns_override(vm_vns_override)
     );
 
     // ============================================================
@@ -138,7 +235,7 @@ module boreal_top (
     // ============================================================
     boreal_learning learn_inst (
         .clk(clk),
-        .enable_learning(spi_data_valid),
+        .enable_learning(fused_valid && !freeze_learning), // Gated by Safety Tier
         .epsilon(current_epsilon),
         .mu(current_mu),
         .w_old(w_dout),
@@ -149,10 +246,12 @@ module boreal_top (
     // ============================================================
     // 5) VNS Reward Controller (v4.0: configurable intensity)
     // ============================================================
+    wire vns_trig = (trigger_reward || vm_vns_override) && !vns_inhibit_therapy;
+
     boreal_vns_control vns_control_inst (
         .clk(clk),
         .rst_n(local_rst_n),
-        .trigger_in(trigger_reward),
+        .trigger_in(vns_trig),
         .intensity(vns_intensity),
         .ad_guard_active(ad_guard_active),
         .t_wave_inhibit(t_wave_inhibit),
@@ -163,9 +262,12 @@ module boreal_top (
     // ============================================================
     // 6) PWM Generators
     // ============================================================
-    // Mux PWM output based on global safety interlock
-    wire [15:0] pwm_safe_in_1 = system_safe ? theta_1 : 16'd0;
-    wire [15:0] pwm_safe_in_2 = system_safe ? theta_2 : 16'd0;
+    // Mux PWM output based on Tier escalations
+    wire [15:0] pwm_safe_in_1 = pwm_inhibit_motion ? 16'd0 :
+                                pwm_half_speed     ? {1'b0, theta_1[15:1]} : theta_1;
+                                
+    wire [15:0] pwm_safe_in_2 = pwm_inhibit_motion ? 16'd0 :
+                                pwm_half_speed     ? {1'b0, theta_2[15:1]} : theta_2;
 
     boreal_pwm_gen pwm_gen_inst_1 (
         .clk(clk),
@@ -195,12 +297,12 @@ module boreal_top (
     );
 
     // ============================================================
-    // 8) Debug Status Registers (v4.0)
+    // 8) Debug Status Registers
     // ============================================================
     boreal_status_regs status_regs_inst (
         .clk(clk),
         .rst_n(local_rst_n),
-        .system_safe(system_safe),
+        .system_safe(~pwm_inhibit_motion), // Map legacy bit back for backwards compatibility
         .addr(dbg_addr),
         .rd_en(dbg_rd_en),
         .rd_data(dbg_rd_data),
